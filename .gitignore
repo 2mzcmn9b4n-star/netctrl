@@ -1,0 +1,6 @@
+netctrl_config.json
+__pycache__/
+*.pyc
+rust_engine/target/
+rust_engine.exe
+*.exe

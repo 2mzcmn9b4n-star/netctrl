@@ -1,0 +1,45 @@
+[package]
+name = "rust_engine"
+version = "0.1.0"
+edition = "2021"
+description = "High-performance Layer-2 network management engine – drop-in replacement for the Python backend"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# HTTP API server (exact same endpoints as Python server.py)
+axum = { version = "0.7", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors"] }
+
+# Packet capture / injection (Layer 2)
+pcap = "2"
+
+# Packet parsing and building – Ethernet, ARP, IPv4
+pnet = "0.35"
+pnet_packet = "0.35"
+
+# IP network helpers (CIDR parsing, subnet iteration)
+ipnetwork = "0.20"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+# DNS resolution for hostname guesses (scanner)
+dns-lookup = "2"
+
+# UUID for generating unique request IDs
+uuid = { version = "1", features = ["v4"] }
+
+# Global state singleton
+once_cell = "1"
+
+# CLI argument parsing
+clap = { version = "4", features = ["derive"] }
+
+# Hostname lookup for local machine
+hostname = "0.4"
