@@ -1,6 +1,19 @@
+import ctypes, sys
+
+def _require_admin():
+    if not ctypes.windll.shell32.IsUserAnAdmin():
+        ctypes.windll.shell32.ShellExecuteW(
+            None, "runas", sys.executable,
+            " ".join(f'"{a}"' for a in sys.argv),
+            None, 1
+        )
+        sys.exit(0)
+
+_require_admin()
+
 """
 main.py
-=======
+======
 Entry point for NetCtrl – a LAN bandwidth controller using ARP spoofing.
 
 +---------------------+           +-----------------------+
@@ -22,9 +35,11 @@ Network interface selection:
 import json
 import os
 import queue
+import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import tkinter as tk
@@ -393,6 +408,22 @@ def select_interface_first_run() -> Optional[str]:
     return result
 
 
+def get_rust_engine_path():
+    # When running as PyInstaller bundle
+    if getattr(sys, 'frozen', False):
+        base = sys._MEIPASS
+        bundled = os.path.join(base, 'rust_engine.exe')
+        # Extract to a writable temp location
+        tmp_dir = os.path.join(tempfile.gettempdir(), 'netctrl')
+        os.makedirs(tmp_dir, exist_ok=True)
+        dest = os.path.join(tmp_dir, 'rust_engine.exe')
+        shutil.copy2(bundled, dest)
+        return dest
+    else:
+        # Running as plain Python script
+        return os.path.join(os.path.dirname(__file__), 'rust_engine.exe')
+
+
 # ----------------------------------------------------------------------
 def main():
     # ---- Dynamic engine selection ----
@@ -434,7 +465,7 @@ def main():
 
         base_path = _get_base_path()
 
-        rust_exe = os.path.join(base_path, "rust_engine.exe")
+        rust_exe = get_rust_engine_path()
         if os.path.isfile(rust_exe):
             print(f"[MAIN] Launching Rust engine: {rust_exe}")
             # CREATE_NO_WINDOW = 0x08000000 on Windows, so no console flashes.

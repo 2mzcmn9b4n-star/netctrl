@@ -55,6 +55,33 @@ python main.py --rust
 
 On first run, a dialog will appear asking you to select your network interface. Choose the interface connected to your LAN (WiFi or Ethernet). The selection is saved to `netctrl_config.json` for future runs.
 
+## 🔧 Build as Standalone EXE (Optional)
+
+If you want a single double-clickable `.exe` that bundles everything:
+
+### Prerequisites
+- Rust toolchain installed ([rustup.rs](https://rustup.rs))
+- Python 3.10+ with pip
+
+### Steps
+
+Simply run the provided build script:
+
+```bat
+build_exe.bat
+```
+
+This will:
+1. Compile the Rust engine (`cargo build --release`)
+2. Install PyInstaller if not already installed
+3. Bundle everything into a single `dist/NetCtrl.exe`
+
+### Run
+Double-click `dist/NetCtrl.exe` — it will automatically request Administrator privileges.
+No Python or Rust installation required on the target machine.
+
+> **Note:** Windows Defender or antivirus may flag the EXE due to network packet capture capabilities. This is a false positive — you can whitelist it or build from source to verify.
+
 ## Features
 
 - Real-time DL/UL speed monitoring per device
