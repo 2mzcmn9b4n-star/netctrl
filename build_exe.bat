@@ -3,6 +3,22 @@ echo ============================================================
 echo  NetCtrl - Build Standalone EXE
 echo ============================================================
 
+echo [0/3] Checking for MSVC linker...
+where link.exe >nul 2>&1
+if errorlevel 1 (
+    echo.
+    echo [ERROR] MSVC linker ^(link.exe^) not found.
+    echo.
+    echo Rust on Windows requires Visual Studio Build Tools with C++ support.
+    echo.
+    echo Download here: https://visualstudio.microsoft.com/visual-cpp-build-tools/
+    echo During install, select: "Desktop development with C++"
+    echo.
+    echo After installing, re-run this script.
+    pause
+    exit /b 1
+)
+
 echo [1/3] Building Rust engine...
 cd rust_engine
 cargo build --release

@@ -20,6 +20,10 @@ This tool is intended for **educational and personal network use only**. You sho
 - **Python 3.10+**
 - **Npcap** ([https://npcap.com](https://npcap.com)) — must be installed before running
 - **Rust toolchain** ([https://rustup.rs](https://rustup.rs)) — only needed to build from source
+- **Visual Studio Build Tools** 
+  ([download](https://visualstudio.microsoft.com/visual-cpp-build-tools/)) 
+  — select "Desktop development with C++" during install. 
+  Required to compile the Rust engine.
 
 ## Installation & Setup
 
