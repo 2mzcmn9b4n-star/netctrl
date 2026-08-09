@@ -18,39 +18,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Npcap and SDK
+      - name: Install Npcap SDK using vcpkg
         run: |
-          # Download and install Npcap runtime
-          $npcapUrl = "https://npcap.com/dist/npcap-1.80.exe"
-          $npcapInstaller = "$env:TEMP\npcap-installer.exe"
+          # Use vcpkg to install npcap SDK reliably
+          vcpkg install npcap:x64-windows
           
-          Write-Host "Downloading Npcap runtime..."
-          Invoke-WebRequest -Uri $npcapUrl -OutFile $npcapInstaller -ErrorAction Stop
+          # Get the vcpkg path
+          $vcpkgPath = "$env:VCPKG_INSTALLATION_ROOT"
+          $sdkPath = "$vcpkgPath\packages\npcap_x64-windows"
           
-          Write-Host "Installing Npcap..."
-          & $npcapInstaller /S /npf_startup=yes /admin=yes
-          Start-Sleep -Seconds 10
+          Write-Host "SDK installed at: $sdkPath"
           
-          # Download Npcap SDK from GitHub releases (more reliable)
-          $sdkUrl = "https://github.com/nmap/npcap/releases/download/v1.80/npcap-sdk-1.16.zip"
-          $sdkZip = "$env:TEMP\npcap-sdk.zip"
-          $sdkPath = "C:\npcap-sdk"
-          
-          Write-Host "Downloading Npcap SDK from GitHub..."
-          Invoke-WebRequest -Uri $sdkUrl -OutFile $sdkZip -ErrorAction Stop
-          
-          Write-Host "Extracting Npcap SDK..."
-          Expand-Archive -Path $sdkZip -DestinationPath $sdkPath -Force
-          
-          # Set environment variables for linking
-          Write-Host "Setting environment variables..."
-          $libPath = "$sdkPath\Lib\x64"
+          # Set environment variables
           Add-Content -Path $env:GITHUB_ENV -Value "NPCAP_SDK=$sdkPath"
-          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$libPath"
+          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$sdkPath\lib"
           
-          Write-Host "Npcap setup completed"
-          Write-Host "SDK Path: $sdkPath"
-          Write-Host "LIB Path: $libPath"
+          Write-Host "Environment variables set"
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -74,12 +57,12 @@ jobs:
           copy /Y target\release\rust_engine.exe ..\rust_engine.exe
           cd ..
         env:
-          NPCAP_SDK: C:\npcap-sdk
-          LIB: C:\npcap-sdk\Lib\x64
+          NPCAP_SDK: ${{ env.NPCAP_SDK }}
+          LIB: ${{ env.LIB }}
 
       - name: Build Python EXE with PyInstaller
         run: |
-          pyinstaller --oneline --noconsole --uac-admin `
+          pyinstaller --onefile --noconsole --uac-admin `
             --add-data "rust_engine.exe;." `
             --add-data "device_names.json;." `
             --name "NetCtrl" `
