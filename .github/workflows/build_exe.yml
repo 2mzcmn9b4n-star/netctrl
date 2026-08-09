@@ -1,0 +1,66 @@
+name: Build NetCtrl EXE
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'rust_engine/**'
+      - '*.py'
+      - 'build_exe.bat'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build Rust engine
+        run: |
+          cd rust_engine
+          cargo build --release
+          copy /Y target\release\rust_engine.exe ..\rust_engine.exe
+          cd ..
+
+      - name: Build Python EXE with PyInstaller
+        run: |
+          pyinstaller --onefile --noconsole --uac-admin `
+            --add-data "rust_engine.exe;." `
+            --add-data "device_names.json;." `
+            --name "NetCtrl" `
+            main.py
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: dist/NetCtrl.exe
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: NetCtrl-Build
+          path: dist/NetCtrl.exe
+          retention-days: 30
