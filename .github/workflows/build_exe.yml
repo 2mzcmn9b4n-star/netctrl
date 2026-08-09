@@ -36,13 +36,54 @@ jobs:
           )
         shell: cmd
 
-      - name: Show environment versions
+      - name: Download & install Npcap SDK (for Packet.lib)
+        shell: powershell
         run: |
-          echo Python version:
-          python --version
-          echo Rust version:
-          rustc --version
+          $zip = "npcap-sdk.zip"
+          # Update the version here if you want a different SDK release
+          $url = "https://npcap.com/dist/npcap-sdk-1.16.zip"
+          Write-Output "Downloading Npcap SDK from $url ..."
+          Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+          Write-Output "Extracting SDK..."
+          Expand-Archive -Path $zip -DestinationPath npcap-sdk -Force
+
+          # Locate Packet.lib and include dir
+          $packet = Get-ChildItem -Path (Join-Path $PWD "npcap-sdk") -Filter Packet.lib -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $packet) {
+            Write-Error "Packet.lib not found in the SDK; aborting."
+            exit 1
+          }
+          $libDir = $packet.Directory.FullName
+
+          $pcapHeader = Get-ChildItem -Path (Join-Path $PWD "npcap-sdk") -Filter "pcap.h" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $pcapHeader) {
+            Write-Error "pcap.h not found in the SDK; aborting."
+            exit 1
+          }
+          $includeDir = $pcapHeader.Directory.FullName
+
+          Write-Output "Found Packet.lib at: $libDir"
+          Write-Output "Found includes at: $includeDir"
+
+          # Export env vars for subsequent steps
+          Add-Content -Path $env:GITHUB_ENV -Value "NPCAP_SDK=$(Join-Path $PWD 'npcap-sdk')"
+          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$libDir;$env:LIB"
+          Add-Content -Path $env:GITHUB_ENV -Value "INCLUDE=$includeDir;$env:INCLUDE"
+
+      - name: Show environment versions and SDK info
         shell: cmd
+        run: |
+          echo Python:
+          python --version
+          echo Rust:
+          rustc --version
+          echo link.exe location:
+          where link.exe
+          echo LIB:
+          echo %LIB%
+          echo INCLUDE:
+          echo %INCLUDE%
+          if defined NPCAP_SDK echo NPCAP_SDK=%NPCAP_SDK%
 
       - name: Run build script (build_exe.bat)
         run: |
@@ -51,7 +92,6 @@ jobs:
             call build_exe.bat
           ) else (
             echo "ERROR: build_exe.bat not found in repository root."
-            echo "If your build script is elsewhere, update this workflow to run the correct script or command."
             exit 1
           )
         shell: cmd
