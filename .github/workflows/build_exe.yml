@@ -1,132 +1,64 @@
-name: Build NetCtrl EXE
+name: Build EXE (Windows)
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - 'rust_engine/**'
-      - '*.py'
-      - 'build_exe.bat'
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
-  build:
+  build-windows:
+    name: Build on Windows
     runs-on: windows-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Npcap SDK (download with fallbacks)
-        shell: pwsh
-        run: |
-          $out = Join-Path $env:RUNNER_TEMP "npcap-sdk.zip"
-          $sdkExtractDir = Join-Path $env:RUNNER_TEMP "npcap-sdk"
-          if (Test-Path $sdkExtractDir) { Remove-Item -Recurse -Force $sdkExtractDir }
-          if (Test-Path $out) { Remove-Item -Force $out }
-
-          $candidates = @(
-            "https://npcap.com/dist/npcap-sdk.zip",
-            "https://github.com/nmap/npcap/releases/latest"
-          )
-
-          $downloaded = $false
-          foreach ($u in $candidates) {
-            try {
-              if ($u -like "*releases/latest") {
-                Write-Host "Attempting to find SDK asset on GitHub releases page: $u"
-                $html = Invoke-WebRequest -Uri $u -UseBasicParsing -ErrorAction Stop
-                # Look for an asset link that ends with npcap-sdk*.zip
-                $match = [regex]::Matches($html.Content, 'href="(?<p>/nmap/npcap/releases/download/[^"]*npcap-sdk[^"]*\.zip)"') | Select-Object -First 1
-                if ($match -and $match.Groups['p'].Value) {
-                  $assetPath = $match.Groups['p'].Value
-                  $downloadUrl = "https://github.com$assetPath"
-                  Write-Host "Found asset URL: $downloadUrl"
-                } else {
-                  Write-Host "No npcap-sdk asset found on releases page."
-                  continue
-                }
-              } else {
-                $downloadUrl = $u
-                Write-Host "Attempting direct SDK URL: $downloadUrl"
-              }
-
-              Write-Host "Downloading from $downloadUrl to $out"
-              Invoke-WebRequest -Uri $downloadUrl -OutFile $out -UseBasicParsing -ErrorAction Stop
-              Write-Host "Download succeeded."
-              $downloaded = $true
-              break
-            } catch {
-              Write-Host "Download attempt from $u failed: $($_.Exception.Message)"
-            }
-          }
-
-          if (-not $downloaded) {
-            Write-Error "Failed to download Npcap SDK from known sources. Please verify availability or update workflow with a reachable SDK URL."
-            exit 1
-          }
-
-          Expand-Archive -Path $out -DestinationPath $sdkExtractDir -Force
-
-          # If the archive creates a single subfolder, use that as the sdk path
-          $childDirs = Get-ChildItem -Path $sdkExtractDir -Directory -ErrorAction SilentlyContinue
-          if ($childDirs -and $childDirs.Count -eq 1) { $sdkPath = $childDirs[0].FullName } else { $sdkPath = $sdkExtractDir }
-
-          Write-Host "SDK installed at: $sdkPath"
-
-          # Export environment variables for subsequent steps
-          Add-Content -Path $env:GITHUB_ENV -Value "NPCAP_SDK=$sdkPath"
-          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$sdkPath\Lib"
-
-          Write-Host "Environment variables set: NPCAP_SDK and LIB"
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
-      - name: Install Python dependencies
-        run: |
-          pip install scapy psutil requests customtkinter
-          pip install pyinstaller
-
-      - name: Build Rust engine
-        shell: cmd
-        run: |
-          cd rust_engine
-          cargo build --release
-          if errorlevel 1 exit /b 1
-          copy /Y target\release\rust_engine.exe ..\rust_engine.exe
-          cd ..
-        env:
-          NPCAP_SDK: ${{ env.NPCAP_SDK }}
-          LIB: ${{ env.LIB }}
-
-      - name: Build Python EXE with PyInstaller
-        run: |
-          pyinstaller --onefile --noconsole --uac-admin `
-            --add-data "rust_engine.exe;." `
-            --add-data "device_names.json;." `
-            --name "NetCtrl" `
-            main.py
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Set up Rust toolchain
+        uses: actions-rs/toolchain@v1
         with:
-          files: dist/NetCtrl.exe
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          toolchain: stable
+          profile: minimal
+          override: true
 
-      - name: Upload artifact
+      - name: Install Python dependencies (if requirements.txt exists)
+        if: ${{ always() }}
+        run: |
+          if exist requirements.txt (
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt
+          ) else (
+            echo "requirements.txt not found, skipping pip install."
+          )
+        shell: cmd
+
+      - name: Show environment versions
+        run: |
+          python --version
+          rustc --version
+        shell: bash
+
+      - name: Run build script (buildexe.bat)
+        run: |
+          if exist buildexe.bat (
+            echo "Running buildexe.bat..."
+            buildexe.bat
+          ) else (
+            echo "ERROR: buildexe.bat not found in repository root."
+            echo "If your build script is elsewhere, update this workflow to run the correct script or command."
+            exit 1
+          )
+        shell: cmd
+
+      - name: Collect EXE artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: NetCtrl-Build
-          path: dist/NetCtrl.exe
-          retention-days: 30
+          name: netctrl-exe
+          path: |
+            **\*.exe
+            dist\**\*.exe
