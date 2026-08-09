@@ -26,8 +26,7 @@ jobs:
           profile: minimal
           override: true
 
-      - name: Install Python dependencies (if requirements.txt exists)
-        if: ${{ always() }}
+      - name: Install Python dependencies if present
         run: |
           if exist requirements.txt (
             python -m pip install --upgrade pip
@@ -39,17 +38,19 @@ jobs:
 
       - name: Show environment versions
         run: |
+          echo Python version:
           python --version
+          echo Rust version:
           rustc --version
-        shell: bash
+        shell: cmd
 
-      - name: Run build script (buildexe.bat)
+      - name: Run build script (build_exe.bat)
         run: |
-          if exist buildexe.bat (
-            echo "Running buildexe.bat..."
-            buildexe.bat
+          if exist build_exe.bat (
+            echo "Running build_exe.bat..."
+            call build_exe.bat
           ) else (
-            echo "ERROR: buildexe.bat not found in repository root."
+            echo "ERROR: build_exe.bat not found in repository root."
             echo "If your build script is elsewhere, update this workflow to run the correct script or command."
             exit 1
           )
