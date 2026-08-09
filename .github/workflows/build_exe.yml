@@ -40,35 +40,64 @@ jobs:
         shell: powershell
         run: |
           $zip = "npcap-sdk.zip"
-          # Update the version here if you want a different SDK release
+          # Update the version here if needed
           $url = "https://npcap.com/dist/npcap-sdk-1.16.zip"
           Write-Output "Downloading Npcap SDK from $url ..."
           Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
           Write-Output "Extracting SDK..."
           Expand-Archive -Path $zip -DestinationPath npcap-sdk -Force
 
-          # Locate Packet.lib and include dir
-          $packet = Get-ChildItem -Path (Join-Path $PWD "npcap-sdk") -Filter Packet.lib -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $packet) {
-            Write-Error "Packet.lib not found in the SDK; aborting."
+          # Find Packet.lib and wpcap.lib; prefer x64/amd64 folders to avoid machine-type mismatch.
+          $libFiles = Get-ChildItem -Path (Join-Path $PWD "npcap-sdk") -Filter "*.lib" -Recurse -ErrorAction SilentlyContinue
+
+          if (-not $libFiles) {
+            Write-Error "No .lib files found in npcap-sdk. Inspect the SDK root: $(Get-ChildItem -Path (Join-Path $PWD 'npcap-sdk') | Out-String)"
             exit 1
           }
-          $libDir = $packet.Directory.FullName
 
+          # Prefer 64-bit directories (common names: x64, amd64, x86_64)
+          $preferredPacket = $libFiles | Where-Object { $_.Name -ieq 'Packet.lib' -and ($_.DirectoryName -match 'x64|amd64|x86_64|AMD64') } | Select-Object -First 1
+          $preferredWpcap = $libFiles | Where-Object { $_.Name -ieq 'wpcap.lib' -and ($_.DirectoryName -match 'x64|amd64|x86_64|AMD64') } | Select-Object -First 1
+
+          # Fallback: pick any Packet.lib/wpcap.lib if preferred not found
+          if (-not $preferredPacket) {
+            $preferredPacket = $libFiles | Where-Object { $_.Name -ieq 'Packet.lib' } | Select-Object -First 1
+          }
+          if (-not $preferredWpcap) {
+            $preferredWpcap = $libFiles | Where-Object { $_.Name -ieq 'wpcap.lib' } | Select-Object -First 1
+          }
+
+          if (-not $preferredPacket) {
+            Write-Error "Packet.lib not found in the SDK; aborting. SDK contents: $(Get-ChildItem -Recurse -Path npcap-sdk | Out-String)"
+            exit 1
+          }
+
+          $libDirs = @()
+          $libDirs += $preferredPacket.Directory.FullName
+          if ($preferredWpcap) {
+            if ($preferredWpcap.Directory.FullName -ne $preferredPacket.Directory.FullName) {
+              $libDirs += $preferredWpcap.Directory.FullName
+            }
+          }
+
+          # Find include dir (pcap.h)
           $pcapHeader = Get-ChildItem -Path (Join-Path $PWD "npcap-sdk") -Filter "pcap.h" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $pcapHeader) {
-            Write-Error "pcap.h not found in the SDK; aborting."
+            Write-Error "pcap.h (header) not found in the SDK; aborting."
             exit 1
           }
           $includeDir = $pcapHeader.Directory.FullName
 
-          Write-Output "Found Packet.lib at: $libDir"
-          Write-Output "Found includes at: $includeDir"
+          Write-Output "Selected lib directories:"
+          $libDirs | ForEach-Object { Write-Output "  $_" }
+          Write-Output "Include directory: $includeDir"
 
-          # Export env vars for subsequent steps
+          # Export env vars for subsequent steps (prepend to LIB/INCLUDE)
           Add-Content -Path $env:GITHUB_ENV -Value "NPCAP_SDK=$(Join-Path $PWD 'npcap-sdk')"
-          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$libDir;$env:LIB"
-          Add-Content -Path $env:GITHUB_ENV -Value "INCLUDE=$includeDir;$env:INCLUDE"
+          # Prepend all libDirs joined by ';'
+          $libPathValue = ($libDirs -join ';') + ';' + $env:LIB
+          Add-Content -Path $env:GITHUB_ENV -Value ("LIB=" + $libPathValue)
+          Add-Content -Path $env:GITHUB_ENV -Value ("INCLUDE=" + $includeDir + ';' + $env:INCLUDE)
 
       - name: Show environment versions and SDK info
         shell: cmd
