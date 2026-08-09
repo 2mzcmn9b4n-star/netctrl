@@ -18,19 +18,35 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Npcap
+      - name: Install Npcap and SDK
         run: |
+          # Download and install Npcap runtime
           $npcapUrl = "https://npcap.com/dist/npcap-1.79.exe"
-          $npcapInstaller = "npcap-installer.exe"
+          $npcapInstaller = "$env:TEMP\npcap-installer.exe"
           
-          Write-Host "Downloading Npcap..."
+          Write-Host "Downloading Npcap runtime..."
           Invoke-WebRequest -Uri $npcapUrl -OutFile $npcapInstaller -ErrorAction Stop
           
           Write-Host "Installing Npcap..."
-          & ".\$npcapInstaller" /S /npf_startup=yes /admin=yes
+          & $npcapInstaller /S /npf_startup=yes /admin=yes
+          Start-Sleep -Seconds 5
           
-          Start-Sleep -Seconds 10
-          Write-Host "Npcap installation completed"
+          # Download and install Npcap SDK
+          $sdkUrl = "https://npcap.com/dist/npcap-sdk-1.14.zip"
+          $sdkZip = "$env:TEMP\npcap-sdk.zip"
+          $sdkPath = "C:\npcap-sdk"
+          
+          Write-Host "Downloading Npcap SDK..."
+          Invoke-WebRequest -Uri $sdkUrl -OutFile $sdkZip -ErrorAction Stop
+          
+          Write-Host "Extracting Npcap SDK..."
+          Expand-Archive -Path $sdkZip -DestinationPath $sdkPath -Force
+          
+          # Set environment variables for linking
+          Write-Host "NPCAP_SDK=$sdkPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "LIB=$sdkPath\Lib\x64;$env:LIB" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          
+          Write-Host "Npcap setup completed"
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -52,6 +68,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Copy-Item -Path target\release\rust_engine.exe -Destination ..\rust_engine.exe -Force
           cd ..
+        env:
+          NPCAP_SDK: C:\npcap-sdk
+          LIB: C:\npcap-sdk\Lib\x64;${{ env.LIB }}
 
       - name: Build Python EXE with PyInstaller
         run: |
