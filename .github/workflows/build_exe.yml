@@ -18,6 +18,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install Npcap
+        run: |
+          # Download Npcap installer
+          $npcapUrl = "https://npcap.com/dist/npcap-1.79.exe"
+          $npcapInstaller = "npcap-installer.exe"
+          
+          Write-Host "Downloading Npcap..."
+          Invoke-WebRequest -Uri $npcapUrl -OutFile $npcapInstaller -ErrorAction Stop
+          
+          Write-Host "Installing Npcap..."
+          & ".\$npcapInstaller" /S /npf_startup=yes /admin=yes
+          
+          # Wait for installation
+          Start-Sleep -Seconds 10
+          
+          Write-Host "Npcap installation completed"
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -37,7 +54,9 @@ jobs:
         run: |
           cd rust_engine
           cargo build --release
+          if errorlevel 1 exit /b 1
           copy /Y target\release\rust_engine.exe ..\rust_engine.exe
+          if errorlevel 1 exit /b 1
           cd ..
 
       - name: Build Python EXE with PyInstaller
