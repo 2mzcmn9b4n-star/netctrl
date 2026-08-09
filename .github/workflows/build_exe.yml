@@ -18,18 +18,54 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Npcap SDK (download and extract)
+      - name: Install Npcap SDK (download with fallbacks)
         shell: pwsh
         run: |
-          # Download the official Npcap SDK ZIP and extract it to the runner temp directory
-          $zipUrl = "https://npcap.com/dist/npcap-sdk.zip"
           $out = Join-Path $env:RUNNER_TEMP "npcap-sdk.zip"
-
-          Write-Host "Downloading Npcap SDK from $zipUrl to $out"
-          Invoke-WebRequest -Uri $zipUrl -OutFile $out -UseBasicParsing
-
           $sdkExtractDir = Join-Path $env:RUNNER_TEMP "npcap-sdk"
           if (Test-Path $sdkExtractDir) { Remove-Item -Recurse -Force $sdkExtractDir }
+          if (Test-Path $out) { Remove-Item -Force $out }
+
+          $candidates = @(
+            "https://npcap.com/dist/npcap-sdk.zip",
+            "https://github.com/nmap/npcap/releases/latest"
+          )
+
+          $downloaded = $false
+          foreach ($u in $candidates) {
+            try {
+              if ($u -like "*releases/latest") {
+                Write-Host "Attempting to find SDK asset on GitHub releases page: $u"
+                $html = Invoke-WebRequest -Uri $u -UseBasicParsing -ErrorAction Stop
+                # Look for an asset link that ends with npcap-sdk*.zip
+                $match = [regex]::Matches($html.Content, 'href="(?<p>/nmap/npcap/releases/download/[^"]*npcap-sdk[^"]*\.zip)"') | Select-Object -First 1
+                if ($match -and $match.Groups['p'].Value) {
+                  $assetPath = $match.Groups['p'].Value
+                  $downloadUrl = "https://github.com$assetPath"
+                  Write-Host "Found asset URL: $downloadUrl"
+                } else {
+                  Write-Host "No npcap-sdk asset found on releases page."
+                  continue
+                }
+              } else {
+                $downloadUrl = $u
+                Write-Host "Attempting direct SDK URL: $downloadUrl"
+              }
+
+              Write-Host "Downloading from $downloadUrl to $out"
+              Invoke-WebRequest -Uri $downloadUrl -OutFile $out -UseBasicParsing -ErrorAction Stop
+              Write-Host "Download succeeded."
+              $downloaded = $true
+              break
+            } catch {
+              Write-Host "Download attempt from $u failed: $($_.Exception.Message)"
+            }
+          }
+
+          if (-not $downloaded) {
+            Write-Error "Failed to download Npcap SDK from known sources. Please verify availability or update workflow with a reachable SDK URL."
+            exit 1
+          }
 
           Expand-Archive -Path $out -DestinationPath $sdkExtractDir -Force
 
