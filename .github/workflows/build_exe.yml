@@ -18,22 +18,32 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Npcap SDK using vcpkg
+      - name: Install Npcap SDK (download and extract)
+        shell: pwsh
         run: |
-          # Use vcpkg to install npcap SDK reliably
-          vcpkg install npcap:x64-windows
-          
-          # Get the vcpkg path
-          $vcpkgPath = "$env:VCPKG_INSTALLATION_ROOT"
-          $sdkPath = "$vcpkgPath\packages\npcap_x64-windows"
-          
+          # Download the official Npcap SDK ZIP and extract it to the runner temp directory
+          $zipUrl = "https://npcap.com/dist/npcap-sdk.zip"
+          $out = Join-Path $env:RUNNER_TEMP "npcap-sdk.zip"
+
+          Write-Host "Downloading Npcap SDK from $zipUrl to $out"
+          Invoke-WebRequest -Uri $zipUrl -OutFile $out -UseBasicParsing
+
+          $sdkExtractDir = Join-Path $env:RUNNER_TEMP "npcap-sdk"
+          if (Test-Path $sdkExtractDir) { Remove-Item -Recurse -Force $sdkExtractDir }
+
+          Expand-Archive -Path $out -DestinationPath $sdkExtractDir -Force
+
+          # If the archive creates a single subfolder, use that as the sdk path
+          $childDirs = Get-ChildItem -Path $sdkExtractDir -Directory -ErrorAction SilentlyContinue
+          if ($childDirs -and $childDirs.Count -eq 1) { $sdkPath = $childDirs[0].FullName } else { $sdkPath = $sdkExtractDir }
+
           Write-Host "SDK installed at: $sdkPath"
-          
-          # Set environment variables
+
+          # Export environment variables for subsequent steps
           Add-Content -Path $env:GITHUB_ENV -Value "NPCAP_SDK=$sdkPath"
-          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$sdkPath\lib"
-          
-          Write-Host "Environment variables set"
+          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$sdkPath\Lib"
+
+          Write-Host "Environment variables set: NPCAP_SDK and LIB"
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
